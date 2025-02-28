@@ -10,6 +10,7 @@ import dotenv from "dotenv";
 import { splSwap } from "./TradingScript";
 import { sltpManager } from "./TradingScript/sltpManager";
 import logger from "./logs/logger";
+import { sleep } from "telegram/Helpers";
 dotenv.config();
 
 const BOT_SESSION = process.env.BOT_SESSION;
@@ -39,7 +40,7 @@ const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
-
+let intervalId: NodeJS.Timeout;
 async function main() {
 	logger.info("Starting to monitor Telegram Channel...")
 	const client = new TelegramClient(new StringSession(BOT_SESSION), API_ID, API_HASH,{ connectionRetries: 5 });
@@ -61,9 +62,7 @@ async function main() {
 				const tokens = message.message.match(base58Regex) || [];
 				logger.info(`🌟matches: ${tokens}`);
 				if (tokens.length) {
-
 					const decimals = (await getMint(connection, new PublicKey(tokens[0]))).decimals;
-					// console.log(tokens[0], AMOUNT, SLIPPAGE, PRIORITY_FEE, JITO_TIP)
 					const {bundleResult, inAmount, outAmount, swapFeeSOL} = await splSwap(connection, tokens[0], AMOUNT, SLIPPAGE, PRIORITY_FEE, JITO_TIP, PRIVATE_KEY, true) || { bundleResult: "", inAmount: 0, outAmount: 0, swapFeeSOL: 0 };
 					if(bundleResult && bundleResult != "") {
 						fs.readFile("ct_active_trades.json", 'utf8', (err, data) => {
@@ -97,15 +96,27 @@ async function main() {
 								logger.info('New trade added successfully!');
 							});
 						});
+						startOrResetInterval()
 					}
 				}
 			}
 		});
-
-		setInterval(sltpManager, 900);
 	} catch (err:any) {
 		logger.error(`Error accessing channel ${err.message}`);
 	}
 }
 
 main();
+startOrResetInterval()
+function startOrResetInterval() {
+	// Clear the existing interval if it exists
+	if (intervalId) {
+			clearInterval(intervalId);
+			console.log("Interval cleared and reset.");
+	}
+	// Start a new interval
+	intervalId = setInterval(() => {
+			console.log("Running sltpManager...");
+			sltpManager(); // Call your function here
+	}, 1000); // Set the interval time in milliseconds
+}

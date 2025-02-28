@@ -230,6 +230,10 @@ export const sendBundle = async (connection: Connection, signedTransaction: Vers
         // httpsAgent: httpsAgent
       });
       // return response.data.result;
+      if(response.status != 200){
+        logger.error("Axios Error in Jito Bundle Posting");
+        return null;
+      }
       return signatures[0];
     } catch (error) {
       logger.error("Cannot Send")

@@ -47,22 +47,21 @@ export async function sltpManager() {
 			return;
 		}
 		const existingData: JsonTrades = JSON.parse(data);
-		const trades = existingData.trades;
+		const trades = existingData?.trades || [];
 		if (trades.length) {
 			try{
 				let tokenList = "So11111111111111111111111111111111111111112";
 				trades.forEach(item => tokenList += `,${item.splToken}`);
 				const rawPriceList = await fetch(`https://api.jup.ag/price/v2?ids=${tokenList}&showExtraInfo=true`);
 				const priceList = await rawPriceList.json();
+				if(priceList == undefined){console.log("Error");return;}
 				trades.forEach(async item => {
-					const solPrice = Number(priceList.data["So11111111111111111111111111111111111111112"].price);
-					const tokenPrice = Number(priceList.data[item.splToken].price);
-					logger.info(`Token Price: ${tokenPrice}, solPrice: ${solPrice}`)
-					const tp = tokenPrice/solPrice*item.initialInvest/10**item.decimals;
-					if (tp > TAKE_PROFIT || tp < STOP_LOSS) { 
-						// console.log(`📈take profit\n${tp}: ${item.initialInvest}: ${solPrice}: ${tokenPrice}: ${item.decimals}`);
-						// Sell Function goes here
-						// sellToken(item.tokenAddress);
+					const solPrice = Number(priceList.data["So11111111111111111111111111111111111111112"].price);  // usd
+					const tokenPrice = Number(priceList.data[item.splToken].price || 0);                                // usd
+					const out = tokenPrice/solPrice*item.boughtAmount;
+					const delta = out - item.initialInvest;
+					if (((delta > TAKE_PROFIT) && (delta > 0)) || ((Math.abs(delta) > STOP_LOSS) && (delta < 0))) { 
+						logger.info(`Token: ${item.splToken}, out: ${out}, initial: ${item.initialInvest}, decimal: ${item.decimals} Delta: ${delta}, Token Price: ${tokenPrice}, SOL Price: ${solPrice}`)
 						const keypair = Keypair.fromSecretKey(bs58.decode(PRIVATE_KEY));
 						const Ata = await getOrCreateAssociatedTokenAccount(
 							connection,
@@ -72,7 +71,7 @@ export async function sltpManager() {
 						);
 						const tokenAmount = await connection.getTokenAccountBalance(Ata.address);
 						const sellAmount = tokenAmount.value.uiAmount || 0;
-						// console.log("5");
+						if(sellAmount == 0){logger.warn("No Token Balance");return;}
 						const {bundleResult, inAmount, outAmount, swapFeeSOL} = await splSwap(
 							connection, item.splToken, sellAmount, SLIPPAGE, PRIORITY_FEE, JITO_TIP, PRIVATE_KEY, false
 						) || {bundleResult:"", inAmount:0, outAmount:0, swapFeeSOL:0}
@@ -119,7 +118,7 @@ export async function sltpManager() {
 							});
 						}
 					} else {
-						logger.info(`🎯 Waiting TP/SL...`);
+						console.log(`🎯 Waiting TP/SL...`);
 					}
 				});
 			}catch(err){
